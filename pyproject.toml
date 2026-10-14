@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yokaze"
-version = "1.0.1"
+version = "1.0.2"
 description = "Yokaze — one-button document scanning for Linux (Fujitsu ScanSnap)"
 readme = "README.md"
 requires-python = ">=3.11"

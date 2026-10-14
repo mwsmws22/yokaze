@@ -1,7 +1,7 @@
 # Maintainer: mwsmws22
 # Build from a published public-mirror release tag on mwsmws22/yokaze.
 pkgname=yokaze
-pkgver=1.0.1
+pkgver=1.0.2
 pkgrel=1
 pkgdesc="Yokaze — one-button document scanning for Linux"
 arch=('any')
@@ -36,10 +36,11 @@ package() {
 
   install -Dm644 com.github.yokaze.Yokaze.desktop \
     "$pkgdir/usr/share/applications/com.github.yokaze.Yokaze.desktop"
-  install -Dm644 src/yokaze/ui/assets/yokaze.svg \
-    "$pkgdir/usr/share/icons/hicolor/scalable/apps/yokaze.svg"
-  install -Dm644 src/yokaze/ui/assets/yokaze.png \
-    "$pkgdir/usr/share/icons/hicolor/512x512/apps/yokaze.png"
+  # PNG sizes only (Plasma prefers scalable SVG; Qt cannot render PNG-in-SVG).
+  for size in 48 64 128 256 512; do
+    install -Dm644 "src/yokaze/ui/assets/icons/hicolor/${size}x${size}/apps/yokaze.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/yokaze.png"
+  done
 
   install -Dm644 systemd/yokaze-button.service \
     "$pkgdir/usr/lib/systemd/user/yokaze-button.service"

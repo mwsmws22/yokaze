@@ -67,14 +67,20 @@ install:
     DESKTOP_ID="com.github.yokaze.Yokaze"
     DESKTOP_FILE="$DESKTOP_DIR/$DESKTOP_ID.desktop"
 
-    mkdir -p "$ICON_DIR" "$PNG_ICON_DIR" "$DESKTOP_DIR"
-    cp "$SCRIPT_DIR/src/yokaze/ui/assets/yokaze.svg" "$ICON_DIR/yokaze.svg"
-    cp "$SCRIPT_DIR/src/yokaze/ui/assets/yokaze.png" "$PNG_ICON_DIR/yokaze.png"
+    HICOLOR="$HOME/.local/share/icons/hicolor"
+    mkdir -p "$DESKTOP_DIR"
+    for size in 48 64 128 256 512; do
+        mkdir -p "$HICOLOR/${size}x${size}/apps"
+        cp "$SCRIPT_DIR/src/yokaze/ui/assets/icons/hicolor/${size}x${size}/apps/yokaze.png" \
+           "$HICOLOR/${size}x${size}/apps/yokaze.png"
+    done
+    rm -f "$HICOLOR/scalable/apps/yokaze.svg"
     sed "s|^Exec=yokaze|Exec=$BIN/yokaze|" \
         "$SCRIPT_DIR/$DESKTOP_ID.desktop" \
         > "$DESKTOP_FILE"
-    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    gtk-update-icon-cache -f "$HICOLOR" 2>/dev/null || true
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+    kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true
     ok "Desktop launcher and icon installed"
 
     mkdir -p "$HOME/.config/systemd/user"
@@ -242,11 +248,13 @@ reload:
     echo "Python entrypoints updated in $BIN"
 
     DESKTOP_ID="com.github.yokaze.Yokaze"
-    ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
-    PNG_ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
-    mkdir -p "$ICON_DIR" "$PNG_ICON_DIR"
-    cp "$SCRIPT_DIR/src/yokaze/ui/assets/yokaze.svg" "$ICON_DIR/yokaze.svg"
-    cp "$SCRIPT_DIR/src/yokaze/ui/assets/yokaze.png" "$PNG_ICON_DIR/yokaze.png"
+    HICOLOR="$HOME/.local/share/icons/hicolor"
+    for size in 48 64 128 256 512; do
+        mkdir -p "$HICOLOR/${size}x${size}/apps"
+        cp "$SCRIPT_DIR/src/yokaze/ui/assets/icons/hicolor/${size}x${size}/apps/yokaze.png" \
+           "$HICOLOR/${size}x${size}/apps/yokaze.png"
+    done
+    rm -f "$HICOLOR/scalable/apps/yokaze.svg"
     sed "s|^Exec=yokaze|Exec=$BIN/yokaze|" \
         "$SCRIPT_DIR/$DESKTOP_ID.desktop" \
         > "$HOME/.local/share/applications/$DESKTOP_ID.desktop"
@@ -310,7 +318,8 @@ uninstall:
     ok "Scripts removed from ~/.local/bin/"
 
     rm -f "$HOME/.local/share/applications/com.github.yokaze.Yokaze.desktop"
-    rm -f "$HOME/.local/share/icons/hicolor/512x512/apps/yokaze.png"
+    rm -f "$HOME/.local/share/icons/hicolor"/*/apps/yokaze.png \
+          "$HOME/.local/share/icons/hicolor/scalable/apps/yokaze.svg"
     ok "Desktop launcher and icon removed"
 
     rm -f "$HOME/.config/systemd/user/yokaze-button.service"
