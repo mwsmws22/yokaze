@@ -136,11 +136,12 @@ class SettingsView(Gtk.Box):
         data_group = Adw.PreferencesGroup()
         data_group.set_title("Data")
         data_group.set_description(
-            "Where scan archives are stored. Default is the XDG data directory "
-            "for this app. Choose a folder to override, or reset to the default."
+            "Where scan History archives are stored. Default is "
+            "~/.local/share/yokaze/archives. Choose a folder to override, "
+            "or reset to the default."
         )
         self._data_dir_row = Adw.ActionRow(title="Archives folder")
-        self._data_dir_row.set_subtitle(str(ui_pkg.DATA))
+        self._data_dir_row.set_subtitle(str(ui_pkg.ARCHIVES))
         choose_btn = Gtk.Button(label="Choose…")
         choose_btn.add_css_class("flat")
         choose_btn.connect("clicked", lambda *_: self._choose_data_dir())
@@ -297,14 +298,14 @@ class SettingsView(Gtk.Box):
     def _refresh_data_dir_row(self) -> None:
         from yokaze import ui as ui_pkg
 
-        self._data_dir_row.set_subtitle(str(ui_pkg.DATA))
+        self._data_dir_row.set_subtitle(str(ui_pkg.ARCHIVES))
 
     def _apply_data_dir(self, path: Path | None) -> None:
         from yokaze.lib import paths as app_paths
         from yokaze import ui as ui_pkg
 
         try:
-            app_paths.save_data_dir_override(path)
+            app_paths.save_archives_dir_override(path)
             ui_pkg.refresh_paths()
         except OSError as exc:
             self._show_error(str(exc))
@@ -313,7 +314,7 @@ class SettingsView(Gtk.Box):
         self._toast_overlay.add_toast(Adw.Toast(title="Archives folder updated"))
 
     def _choose_data_dir(self) -> None:
-        dialog = Gtk.FileDialog(title="Choose archives data folder")
+        dialog = Gtk.FileDialog(title="Choose archives folder")
         root = self.get_root()
         parent = root if isinstance(root, Gtk.Window) else None
 

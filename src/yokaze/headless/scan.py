@@ -52,6 +52,9 @@ def run_headless_scan(name: str | None = None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from yokaze.lib.config.scanner import apply_config, load_config
+
+    apply_config(load_config())
     args = list(sys.argv[1:] if argv is None else argv)
     name = args[0] if args else None
     try:

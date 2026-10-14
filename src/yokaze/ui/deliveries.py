@@ -12,9 +12,9 @@ from yokaze.ui.models import CropRect
 
 
 def _default_path() -> Path:
-    from yokaze.ui import DATA
+    from yokaze.lib import paths as app_paths
 
-    return DATA / "deliveries.json"
+    return app_paths.resolve_deliveries_path()
 
 
 @dataclass

@@ -33,9 +33,9 @@ def require_matching_brod_pin(delivery_pin: str) -> str:
 
 
 def brod_cache_root(brod_pin: str) -> Path:
-    from yokaze.ui import DATA
+    from yokaze.lib import paths as app_paths
 
-    return DATA / "cache" / "delivery-brod" / brod_pin
+    return app_paths.resolve_delivery_brod_cache_dir() / brod_pin
 
 
 def brod_cache_path(brod_pin: str, archive: str, page: int) -> Path:

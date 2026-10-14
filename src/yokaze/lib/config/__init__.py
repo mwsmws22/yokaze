@@ -1,1 +1,1 @@
-"""User scanner.conf loader (Paperless / paths). Tone knobs live in ``lib.tone``."""
+"""Identity-scoped scanner.conf loader (Paperless / device). Tone knobs live in ``lib.tone``."""

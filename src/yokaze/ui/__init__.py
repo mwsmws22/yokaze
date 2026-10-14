@@ -17,7 +17,7 @@ DATA = _paths.resolve_data_dir()
 CORPUS = DATA / "corpus"
 # Crop-attempt bookmarks retired; crops live in metadata.history + attempts.json
 ATTEMPTS_JSON = DATA / "attempts.json"
-ARCHIVES = DATA / "archives"
+ARCHIVES = _paths.resolve_archives_dir()
 CACHE = _paths.cache_dir()
 LIB_CORE = ROOT / "lib" / "core"
 LIB_CORPUS = LIB_CORE / "corpus"
@@ -30,7 +30,7 @@ def refresh_paths() -> None:
     DATA = _paths.resolve_data_dir()
     CORPUS = DATA / "corpus"
     ATTEMPTS_JSON = DATA / "attempts.json"
-    ARCHIVES = DATA / "archives"
+    ARCHIVES = _paths.resolve_archives_dir()
     CACHE = _paths.cache_dir()
     # Keep backend's imported aliases in sync (tests monkeypatch those names).
     from yokaze.ui import backend as _backend

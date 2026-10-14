@@ -1,4 +1,4 @@
-"""Scanner and Paperless settings (yokaze.conf + systemd session env)."""
+"""Scanner and Paperless settings (identity-scoped scanner.conf)."""
 
 from __future__ import annotations
 
@@ -11,13 +11,11 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".config" / "environment.d"
-CONFIG_PATH = CONFIG_DIR / "yokaze.conf"
+from yokaze.lib import paths as app_paths
 
 AUTO_DEVICE = ""
 _SCANNER_RE = re.compile(r"device `([^']+)' is a")
 _FUJITSU_RE = re.compile(r"fujitsu:ScanSnap")
-
 
 DEFAULT_ENHANCE_WORKERS = 1
 
@@ -26,6 +24,23 @@ PAPER_SIZE_AUTO = "auto"
 PAPER_SIZE_A4 = "a4"
 PAPER_SIZES = (PAPER_SIZE_AUTO, PAPER_SIZE_A4)
 DEFAULT_PAPER_SIZE = PAPER_SIZE_AUTO
+
+_BUTTON_SERVICE = "yokaze-button.service"
+
+
+def config_path() -> Path:
+    """``~/.config/yokaze/scanner.conf`` or ``…/yokaze-dev/scanner.conf``."""
+    return app_paths.config_dir() / "scanner.conf"
+
+
+def _xdg_config_root() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME")
+    return Path(base) if base else Path.home() / ".config"
+
+
+def _legacy_config_paths() -> tuple[Path, ...]:
+    env_d = _xdg_config_root() / "environment.d"
+    return (env_d / "yokaze.conf", env_d / "scanner.conf")
 
 
 def _parse_bool(raw: str) -> bool:
@@ -60,12 +75,9 @@ def _parse_enhance_workers(raw: str) -> int:
         return DEFAULT_ENHANCE_WORKERS
 
 
-def load_config() -> ScannerConfig:
-    if not CONFIG_PATH.is_file():
-        return ScannerConfig()
-
+def _parse_config_text(text: str) -> ScannerConfig:
     values: dict[str, str] = {}
-    for line in CONFIG_PATH.read_text().splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -84,47 +96,62 @@ def load_config() -> ScannerConfig:
     )
 
 
-def save_config(config: ScannerConfig) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    paper_size = parse_paper_size(config.paper_size)
+def _maybe_migrate_legacy_user_conf(path: Path) -> None:
+    """Copy old environment.d conf into user identity path once. Dev stays empty."""
+    if app_paths.identity() != app_paths.IDENTITY_USER:
+        return
+    for legacy in _legacy_config_paths():
+        if not legacy.is_file():
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(legacy.read_text())
+        return
+
+
+def load_config() -> ScannerConfig:
+    path = config_path()
+    if not path.is_file():
+        _maybe_migrate_legacy_user_conf(path)
+    if not path.is_file():
+        return ScannerConfig()
+    return _parse_config_text(path.read_text())
+
+
+def _config_file_text(cfg: ScannerConfig) -> str:
+    paper_size = parse_paper_size(cfg.paper_size)
     lines = [
         "# Yokaze scanner / Paperless configuration",
-        f"SCANNER_DEVICE={config.scanner_device}",
-        f"PAPERLESS_URL={config.paperless_url}",
-        f"PAPERLESS_TOKEN={config.paperless_token}",
-        f"SCAN_ENHANCE_WORKERS={config.enhance_workers}",
-        f"DEVELOPER_MODE={'1' if config.developer_mode else '0'}",
+        f"SCANNER_DEVICE={cfg.scanner_device}",
+        f"PAPERLESS_URL={cfg.paperless_url}",
+        f"PAPERLESS_TOKEN={cfg.paperless_token}",
+        f"SCAN_ENHANCE_WORKERS={cfg.enhance_workers}",
+        f"DEVELOPER_MODE={'1' if cfg.developer_mode else '0'}",
         f"PAPER_SIZE={paper_size}",
     ]
-    CONFIG_PATH.write_text("\n".join(lines) + "\n")
-    apply_config(config)
+    return "\n".join(lines) + "\n"
 
 
-def apply_config(config: ScannerConfig) -> None:
+def save_config(cfg: ScannerConfig) -> None:
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_config_file_text(cfg))
+    apply_config(cfg, restart_button=True)
+
+
+def apply_config(cfg: ScannerConfig, *, restart_button: bool = False) -> None:
     # Set in *this* process too, so a GUI session picks up the new worker
     # count on the next scan document — no app restart needed.
-    paper_size = parse_paper_size(config.paper_size)
-    os.environ["SCANNER_DEVICE"] = config.scanner_device
-    os.environ["PAPERLESS_URL"] = config.paperless_url
-    os.environ["PAPERLESS_TOKEN"] = config.paperless_token
-    os.environ["SCAN_ENHANCE_WORKERS"] = str(config.enhance_workers)
+    paper_size = parse_paper_size(cfg.paper_size)
+    os.environ["SCANNER_DEVICE"] = cfg.scanner_device
+    os.environ["PAPERLESS_URL"] = cfg.paperless_url
+    os.environ["PAPERLESS_TOKEN"] = cfg.paperless_token
+    os.environ["SCAN_ENHANCE_WORKERS"] = str(cfg.enhance_workers)
     os.environ["PAPER_SIZE"] = paper_size
 
-    env_args = [
-        f"SCANNER_DEVICE={config.scanner_device}",
-        f"PAPERLESS_URL={config.paperless_url}",
-        f"PAPERLESS_TOKEN={config.paperless_token}",
-        f"SCAN_ENHANCE_WORKERS={config.enhance_workers}",
-        f"PAPER_SIZE={paper_size}",
-    ]
+    if not restart_button:
+        return
     subprocess.run(
-        ["systemctl", "--user", "set-environment", *env_args],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["systemctl", "--user", "restart", "scan-button.service"],
+        ["systemctl", "--user", "restart", _BUTTON_SERVICE],
         check=False,
         capture_output=True,
         text=True,

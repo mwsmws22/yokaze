@@ -1,4 +1,4 @@
-"""Identity-scoped XDG paths and Settings data-dir override."""
+"""Identity-scoped XDG paths; archives override separate from lab data."""
 
 from __future__ import annotations
 
@@ -26,8 +26,14 @@ def identity() -> str:
     return IDENTITY_USER
 
 
+def app_id_for(ident: str) -> str:
+    if ident not in _VALID_IDENTITIES:
+        ident = IDENTITY_USER
+    return _APP_IDS[ident]
+
+
 def app_id() -> str:
-    return _APP_IDS[identity()]
+    return app_id_for(identity())
 
 
 def xdg_name() -> str:
@@ -56,45 +62,6 @@ def app_conf_path() -> Path:
     return config_dir() / "app.conf"
 
 
-def load_data_dir_override() -> Path | None:
-    path = app_conf_path()
-    if not path.is_file():
-        return None
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() != "data_dir":
-            continue
-        raw = value.strip()
-        if raw:
-            return Path(raw).expanduser()
-        return None
-    return None
-
-
-def save_data_dir_override(data_dir: Path | None) -> None:
-    """Persist override, or clear it when ``data_dir`` is None (XDG default)."""
-    conf = app_conf_path()
-    conf.parent.mkdir(parents=True, exist_ok=True)
-    if data_dir is None:
-        if conf.is_file():
-            conf.unlink()
-        return
-    conf.write_text(
-        "# Yokaze app settings\n"
-        f"data_dir={data_dir.expanduser()}\n"
-    )
-
-
-def resolve_data_dir() -> Path:
-    override = load_data_dir_override()
-    if override is not None:
-        return override
-    return data_xdg_dir()
-
-
 def find_repo_root() -> Path:
     """Walk up from this package to the checkout that holds data/ (dev layout)."""
     here = Path(__file__).resolve().parent
@@ -105,3 +72,103 @@ def find_repo_root() -> Path:
             return parent
     # src/yokaze/lib → parents[2] is repo root in the standard layout
     return here.parents[2]
+
+
+def _read_app_conf() -> dict[str, str]:
+    path = app_conf_path()
+    if not path.is_file():
+        return {}
+    out: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        out[key.strip()] = value.strip()
+    return out
+
+
+def _write_app_conf(values: dict[str, str]) -> None:
+    conf = app_conf_path()
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    if not values:
+        if conf.is_file():
+            conf.unlink()
+        return
+    lines = ["# Yokaze app settings"]
+    for key in sorted(values):
+        lines.append(f"{key}={values[key]}")
+    conf.write_text("\n".join(lines) + "\n")
+
+
+def load_archives_dir_override() -> Path | None:
+    """Settings override for the archives root (directory of archive slug folders)."""
+    conf = _read_app_conf()
+    raw = conf.get("archives_dir", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    # Legacy: data_dir was the parent of archives/ (whole tree root).
+    legacy = conf.get("data_dir", "").strip()
+    if legacy:
+        return Path(legacy).expanduser() / "archives"
+    return None
+
+
+def save_archives_dir_override(archives_dir: Path | None) -> None:
+    """Persist archives override, or clear it (XDG default). Drops legacy data_dir."""
+    conf = _read_app_conf()
+    conf.pop("data_dir", None)
+    if archives_dir is None:
+        conf.pop("archives_dir", None)
+    else:
+        conf["archives_dir"] = str(archives_dir.expanduser())
+    _write_app_conf(conf)
+
+
+# Back-compat aliases used by older Settings / tests.
+def load_data_dir_override() -> Path | None:
+    """Deprecated: returns parent of archives override when set."""
+    archives = load_archives_dir_override()
+    return None if archives is None else archives.parent
+
+
+def save_data_dir_override(data_dir: Path | None) -> None:
+    """Deprecated: Settings used to store the parent of archives/."""
+    if data_dir is None:
+        save_archives_dir_override(None)
+        return
+    save_archives_dir_override(Path(data_dir).expanduser() / "archives")
+
+
+def resolve_archives_dir() -> Path:
+    """Scan History archives root — XDG by default; Settings may override."""
+    override = load_archives_dir_override()
+    if override is not None:
+        return override
+    return data_xdg_dir() / "archives"
+
+
+def resolve_stage_tray_dir() -> Path:
+    """Durable Stage tab tray (survives quit / F5)."""
+    return data_xdg_dir() / "stage-tray"
+
+
+def resolve_deliveries_path() -> Path:
+    """Local Paperless delivery index (UUID → pages for Restage)."""
+    return data_xdg_dir() / "deliveries.json"
+
+
+def resolve_delivery_brod_cache_dir() -> Path:
+    """Pin-keyed Restage re-brod TIFF cache."""
+    return cache_dir() / "delivery-brod"
+
+
+def resolve_data_dir() -> Path:
+    """Lab / workbench data root (corpus, attempts, pins, …).
+
+    Dev always uses ``<repo>/data``. User (release) uses the XDG data dir.
+    Archives, Stage tray, and delivery-brod cache are resolved separately under XDG.
+    """
+    if identity() == IDENTITY_DEV:
+        return find_repo_root() / "data"
+    return data_xdg_dir()

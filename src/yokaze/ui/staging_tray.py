@@ -1,4 +1,4 @@
-"""Stage tab tray — durable under data/stage-tray/ (quit/F5/reopen safe)."""
+"""Stage tab tray — durable under XDG stage-tray/ (quit/F5/reopen safe)."""
 
 from __future__ import annotations
 
@@ -46,9 +46,9 @@ def block_insert_index(
 
 
 def _default_stage_dir() -> Path:
-    from yokaze import ui as ui_pkg
+    from yokaze.lib import paths as app_paths
 
-    return ui_pkg.DATA / "stage-tray"
+    return app_paths.resolve_stage_tray_dir()
 
 
 @dataclass
@@ -156,7 +156,7 @@ class StagingTray:
 
     @classmethod
     def load_persisted(cls) -> StagingTray:
-        """Load durable Stage tray from ``data/stage-tray/``, or empty durable tray."""
+        """Load durable Stage tray from XDG ``stage-tray/``, or empty durable tray."""
         root = _default_stage_dir()
         tray = cls(durable=True, _root=root)
         root.mkdir(parents=True, exist_ok=True)

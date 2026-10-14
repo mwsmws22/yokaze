@@ -1,4 +1,4 @@
-"""Identity-scoped XDG paths and Settings data-dir override."""
+"""Identity-scoped XDG paths; archives override separate from lab data."""
 
 from __future__ import annotations
 
@@ -28,24 +28,50 @@ def test_user_defaults_to_xdg(xdg_home: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("YOKAZE_IDENTITY", "user")
     assert paths.app_id() == "com.github.yokaze.Yokaze"
     assert paths.resolve_data_dir() == xdg_home / "data" / "yokaze"
+    assert paths.resolve_archives_dir() == xdg_home / "data" / "yokaze" / "archives"
+    assert paths.resolve_stage_tray_dir() == xdg_home / "data" / "yokaze" / "stage-tray"
+    assert paths.resolve_deliveries_path() == (
+        xdg_home / "data" / "yokaze" / "deliveries.json"
+    )
+    assert paths.resolve_delivery_brod_cache_dir() == (
+        xdg_home / "cache" / "yokaze" / "delivery-brod"
+    )
     assert paths.cache_dir() == xdg_home / "cache" / "yokaze"
     assert paths.config_dir() == xdg_home / "config" / "yokaze"
 
 
-def test_dev_defaults_to_xdg(xdg_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dev_lab_data_is_repo_archives_are_xdg(
+    xdg_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("YOKAZE_IDENTITY", "dev")
+    repo = tmp_path / "repo"
+    (repo / "data").mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='yokaze'\n")
+    monkeypatch.setattr(paths, "find_repo_root", lambda: repo)
     assert paths.app_id() == "com.github.yokaze.Yokaze.Dev"
-    assert paths.resolve_data_dir() == xdg_home / "data" / "yokaze-dev"
+    assert paths.resolve_data_dir() == repo / "data"
+    assert paths.resolve_archives_dir() == xdg_home / "data" / "yokaze-dev" / "archives"
     assert paths.config_dir() == xdg_home / "config" / "yokaze-dev"
 
 
-def test_settings_override_wins(xdg_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_archives_override_wins(xdg_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("YOKAZE_IDENTITY", "user")
-    override = xdg_home / "custom-data"
-    paths.save_data_dir_override(override)
-    assert paths.resolve_data_dir() == override
-    paths.save_data_dir_override(None)
+    override = xdg_home / "custom-archives"
+    paths.save_archives_dir_override(override)
+    assert paths.resolve_archives_dir() == override
     assert paths.resolve_data_dir() == xdg_home / "data" / "yokaze"
+    paths.save_archives_dir_override(None)
+    assert paths.resolve_archives_dir() == xdg_home / "data" / "yokaze" / "archives"
+
+
+def test_legacy_data_dir_maps_to_archives_subdir(
+    xdg_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("YOKAZE_IDENTITY", "user")
+    conf = paths.app_conf_path()
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text("# Yokaze app settings\ndata_dir=/old/data\n")
+    assert paths.resolve_archives_dir() == Path("/old/data/archives")
 
 
 def test_refresh_paths_updates_ui_globals(
@@ -57,8 +83,9 @@ def test_refresh_paths_updates_ui_globals(
     ui.refresh_paths()
     assert ui.APP_ID == "com.github.yokaze.Yokaze"
     assert ui.DATA == xdg_home / "data" / "yokaze"
-    override = xdg_home / "other"
-    paths.save_data_dir_override(override)
+    assert ui.ARCHIVES == xdg_home / "data" / "yokaze" / "archives"
+    override = xdg_home / "other-archives"
+    paths.save_archives_dir_override(override)
     ui.refresh_paths()
-    assert ui.DATA == override
-    assert ui.ARCHIVES == override / "archives"
+    assert ui.DATA == xdg_home / "data" / "yokaze"
+    assert ui.ARCHIVES == override
