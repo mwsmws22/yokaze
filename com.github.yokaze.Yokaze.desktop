@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Yokaze
+GenericName=Document Scanner
+Comment=One-button document scanning for Linux (Fujitsu ScanSnap)
+Exec=yokaze
+Icon=yokaze
+StartupWMClass=com.github.yokaze.Yokaze
+Terminal=false
+Categories=Utility;Scanning;Office;
+Keywords=scan;scanner;yokaze;paperless;document;scansnap;

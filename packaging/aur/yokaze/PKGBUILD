@@ -1,0 +1,50 @@
+# Maintainer: mwsmws22
+# Build from a published public-mirror release tag on mwsmws22/yokaze.
+pkgname=yokaze
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Yokaze — one-button document scanning for Linux"
+arch=('any')
+url="https://github.com/mwsmws22/yokaze"
+license=('MIT')
+depends=(
+  'python'
+  'python-gobject'
+  'python-pillow'
+  'python-numpy'
+  'python-opencv'
+  'gtk4'
+  'libadwaita'
+  'sane'
+  'tesseract'
+  'libnotify'
+  'xdg-utils'
+)
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+_gitname=yokaze
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$_gitname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$srcdir/$_gitname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 com.github.yokaze.Yokaze.desktop \
+    "$pkgdir/usr/share/applications/com.github.yokaze.Yokaze.desktop"
+  install -Dm644 src/yokaze/ui/assets/yokaze.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/yokaze.svg"
+  install -Dm644 src/yokaze/ui/assets/yokaze.png \
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/yokaze.png"
+
+  install -Dm644 systemd/yokaze-button.service \
+    "$pkgdir/usr/lib/systemd/user/yokaze-button.service"
+  install -Dm644 udev/99-scansnap.rules \
+    "$pkgdir/usr/lib/udev/rules.d/99-scansnap.rules"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

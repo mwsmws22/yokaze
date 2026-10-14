@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yokaze"
+version = "1.0.0"
+description = "Yokaze — one-button document scanning for Linux (Fujitsu ScanSnap)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  # PyGObject / GTK / OpenCV (cv2) are system packages on Arch; do not pin here.
+  # Arch: pacman -S python-opencv python-pillow
+  "numpy>=1.26",
+  "Pillow>=10.0",
+]
+
+[project.scripts]
+yokaze = "yokaze.ui.__main__:main"
+yokaze-scan = "yokaze.headless.scan:main"
+yokaze-button = "yokaze.headless.button:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+yokaze = ["ui/assets/**/*", "lib/tone/default.conf", "py.typed"]
