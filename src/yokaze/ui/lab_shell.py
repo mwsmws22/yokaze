@@ -118,6 +118,7 @@ class LabShell(Gtk.Paned):
         self.set_resize_start_child(False)
 
         self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.side.add_css_class("sidebar")
         self.side.add_css_class("lab-sidebar")
         self.side.set_size_request(240, -1)
 
@@ -166,8 +167,14 @@ class LabShell(Gtk.Paned):
         self.toolbar_bar.set_margin_top(8)
         self.toolbar_bar.set_margin_bottom(8)
 
+        # Intra-group spacing is Box.spacing; inter-slot margins keep a gap when
+        # CenterBox packs start against center (or center against end) on a
+        # narrow window — Stage Split vs rotate is the usual collision.
+        _SLOT_GAP = 8
         self.toolbar_start = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.toolbar_start.set_margin_end(_SLOT_GAP)
         self.toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.toolbar.set_margin_end(_SLOT_GAP)
         self.toolbar_end = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.toolbar_bar.set_start_widget(self.toolbar_start)
         self.toolbar_bar.set_center_widget(self.toolbar)

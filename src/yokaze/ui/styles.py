@@ -1,10 +1,12 @@
-"""Adwaita CSS for the crop lab."""
+"""Adwaita CSS for the crop lab.
+
+Do not paint ``window`` backgrounds here. Libadwaita uses
+``var(--window-bg-color)``; Rewaita sets that in ``gtk-4.0/gtk.css``. An
+APPLICATION-priority ``background-color: @window_bg_color`` overrides the
+theme and pins chrome to stock Adwaita while accents still look themed.
+"""
 
 CSS = """
-window {
-  background-color: @window_bg_color;
-}
-
 .lab-sidebar {
   min-width: 220px;
   border-right: 1px solid alpha(currentColor, 0.15);

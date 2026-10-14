@@ -11,7 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gtk  # noqa: E402
 
 from .history_view import HistoryView
-from .icons import register_bundled_icons
+from .icons import header_brand, register_bundled_icons
 from .paperless_view import PaperlessView
 from .reload_app import restart_app
 from . import scan_view as scan_view_module
@@ -154,6 +154,7 @@ class MainWindow(Adw.ApplicationWindow):
         switcher.set_focusable(False)
 
         header = Adw.HeaderBar()
+        header.pack_start(header_brand())
         header.set_title_widget(switcher)
         self._scanner_status = ScannerStatus()
         header.pack_end(self._scanner_status)
