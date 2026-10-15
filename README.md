@@ -42,8 +42,6 @@ need backend-specific adaptation.
 5. **Come back later** — History preserves the raw capture. Reprocess it with
    newer cleanup logic, or rebuild a delivered Paperless document and replace it.
 
-![Yokaze History screen](docs/screenshots/yokaze-history.png)
-
 ## Features
 
 ### Capture without babysitting
@@ -81,7 +79,7 @@ SANE capture → blank detection → rough crop → orientation → deskew
 
 ### Stage: build the document you actually want
 
-![Yokaze Paperless delivery screen](docs/screenshots/yokaze-paperless.png)
+![Yokaze Stage screen](docs/screenshots/yokaze-stage.png)
 
 Stage is a durable page tray between scanning and delivery:
 
@@ -97,6 +95,8 @@ Stage is a durable page tray between scanning and delivery:
 
 ### History: raw scans stay useful
 
+![Yokaze History screen](docs/screenshots/yokaze-history.png)
+
 - Browse every archived scan and page.
 - Reveal an archive in the file manager or delete it from Yokaze.
 - Send the recorded historical result again.
@@ -105,6 +105,8 @@ Stage is a durable page tray between scanning and delivery:
   mixing with other scans.
 
 ### Paperless-ngx, including “clawback”
+
+![Yokaze Paperless delivery screen](docs/screenshots/yokaze-paperless.png)
 
 Yokaze records the page composition of successful Paperless uploads. The
 Paperless tab can **Restage** a delivered document from its original archives,

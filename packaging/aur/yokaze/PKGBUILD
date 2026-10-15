@@ -1,7 +1,7 @@
 # Maintainer: mwsmws22
 # Build from a published public-mirror release tag on mwsmws22/yokaze.
 pkgname=yokaze
-pkgver=1.0.4
+pkgver=1.0.5
 pkgrel=1
 pkgdesc="Yokaze — one-button document scanning for Linux"
 arch=('any')
