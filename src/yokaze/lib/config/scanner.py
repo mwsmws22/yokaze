@@ -208,4 +208,6 @@ def scanner_label(device: str) -> str:
     if not device:
         return "Auto-detect"
     short = device.split("lib=", 1)[0].rstrip(":").removeprefix("fujitsu:")
+    # Drop SANE instance id (e.g. ScanSnap iX1300:11782 → ScanSnap iX1300).
+    short = re.sub(r":\d+$", "", short)
     return short or device
