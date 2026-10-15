@@ -21,9 +21,15 @@ from yokaze.pipeline.wiring import default_pipeline
 
 from yokaze import ui as ui_pkg
 from .enhance_queue import EnhanceQueue
+from .send_targets import SEND_TARGET_LABELS, SEND_TARGET_ORDER, enabled_send_targets
 from .staging_tray import StagingTray
 
-TARGET_LABELS = {"paperless": "Paperless", "naps2": "NAPS2", "stage": "Stage"}
+TARGET_LABELS = {
+    "paperless": "Paperless",
+    "naps2": "NAPS2",
+    "stage": "Stage",
+    "folder": "Folder",
+}
 
 STATE_IDLE = "idle"
 STATE_SCANNING = "scanning"
@@ -287,23 +293,19 @@ class ScanView(Gtk.Box):
                 [("Color", True), ("Grayscale", False), ("Auto", False)],
             )
         )
-        self._send_group, (
-            self.send_paperless,
-            self.send_stage,
-            self.send_naps2,
-        ) = self._build_choice_group(
-            "Send to",
-            [
-                ("Send to Paperless", True),
-                ("Send to Stage", False),
-                ("Send to NAPS2", False),
-            ],
-        )
+        self._send_group, self._send_buttons = self._build_send_group()
 
         scan_page.add(self._page_group)
         scan_page.add(self._color_group)
         scan_page.add(self._send_group)
         body.append(scan_page)
+        self.refresh_send_targets()
+
+        # Back-compat attribute names used by older tests / callers.
+        self.send_paperless = self._send_buttons["paperless"]
+        self.send_stage = self._send_buttons["stage"]
+        self.send_naps2 = self._send_buttons["naps2"]
+        self.send_folder = self._send_buttons["folder"]
 
         self.scan_button = Gtk.Button(label="Scan")
         self.scan_button.add_css_class("suggested-action")
@@ -354,6 +356,41 @@ class ScanView(Gtk.Box):
 
         return group, buttons
 
+    def _build_send_group(
+        self,
+    ) -> tuple[Adw.PreferencesGroup, dict[str, Gtk.CheckButton]]:
+        group = Adw.PreferencesGroup()
+        group.set_title("Send to")
+        buttons: dict[str, Gtk.CheckButton] = {}
+        rows: dict[str, Adw.ActionRow] = {}
+        radio_group: Gtk.CheckButton | None = None
+        for target in SEND_TARGET_ORDER:
+            row = Adw.ActionRow(title=f"Send to {SEND_TARGET_LABELS[target]}")
+            button = Gtk.CheckButton()
+            if radio_group is None:
+                radio_group = button
+            else:
+                button.set_group(radio_group)
+            button.set_can_focus(False)
+            row.add_prefix(button)
+            row.set_activatable_widget(button)
+            group.add(row)
+            buttons[target] = button
+            rows[target] = row
+        self._send_rows = rows
+        return group, buttons
+
+    def refresh_send_targets(self) -> None:
+        """Show only destinations enabled in Settings; keep a valid selection."""
+        enabled = enabled_send_targets()
+        current = self._send_target()
+        for target, row in self._send_rows.items():
+            row.set_visible(target in enabled)
+        ordered = [t for t in SEND_TARGET_ORDER if t in enabled]
+        pick = current if current in enabled else (ordered[0] if ordered else "paperless")
+        for target, button in self._send_buttons.items():
+            button.set_active(target == pick)
+
     # --- Scan flow -------------------------------------------------------
 
     def trigger_scan(self) -> None:
@@ -376,14 +413,13 @@ class ScanView(Gtk.Box):
         return "auto"
 
     def _send_target(self) -> DeliverTarget | str:
-        if self.send_naps2.get_active():
-            return "naps2"
-        if self.send_stage.get_active():
-            return "stage"
+        for target, button in self._send_buttons.items():
+            if button.get_active():
+                return target
         return "paperless"
 
     def _wants_stage(self) -> bool:
-        return self.send_stage.get_active()
+        return self._send_buttons["stage"].get_active()
 
     def _capture(self) -> None:
         self._set_scanning("Scanning...")

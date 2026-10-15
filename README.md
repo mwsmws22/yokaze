@@ -39,8 +39,8 @@ need backend-specific adaptation.
    deskewed, cropped, color-adjusted, and assembled in the background.
 4. **Send directly or use Stage** — deliver immediately, or collect pages from
    several scans and edit the document before sending.
-5. **Come back later** — History preserves the raw capture. Reprocess it with
-   newer cleanup logic, or rebuild a delivered Paperless document and replace it.
+5. **Come back later** — History preserves the raw capture. Resend it, stage it
+   for edits, or rebuild a delivered Paperless document and replace it.
 
 ## Features
 
@@ -99,10 +99,8 @@ Stage is a durable page tray between scanning and delivery:
 
 - Browse every archived scan and page.
 - Reveal an archive in the file manager or delete it from Yokaze.
-- Send the recorded historical result again.
-- Reprocess the raw scan through the current finishing pipeline.
-- Send an archive directly to Paperless or add it to Stage for editing and
-  mixing with other scans.
+- Send the recorded historical result to Paperless again.
+- Add an archive to Stage for editing and mixing with other scans.
 
 ### Paperless-ngx, including “clawback”
 
@@ -158,7 +156,7 @@ Open **Yokaze** from the application menu and visit **Settings** to:
 - select or refresh the scanner;
 - choose automatic-length or fixed-A4 capture;
 - set background enhancement workers;
-- choose the History archives folder;
+- choose the History folder and which Send to destinations appear;
 - enter and test Paperless-ngx credentials.
 
 ### Requirements
@@ -189,10 +187,10 @@ just gui
 The five tabs form the normal usage flow:
 
 - **Scan** — choose page mode, color, and Paperless / Stage / NAPS2.
-- **History** — revisit, resend, reprocess, or stage raw archives.
+- **History** — revisit, resend, or stage raw archives.
 - **Stage** — assemble and correct pages before sending.
 - **Paperless** — browse local delivery records and Restage an upload.
-- **Settings** — scanner, paper, performance, archives, and Paperless setup.
+- **Settings** — scanner, paper, performance, Send to, History folder, and Paperless setup.
 
 ### Hardware button and headless mode
 
@@ -207,8 +205,9 @@ Paperless is preferred when configured; otherwise `FOLDER_DIR` is used.
 
 ## Data and privacy
 
-- Raw History archives stay local under `~/.local/share/yokaze/archives` by
-  default, or in the folder selected in Settings.
+- Raw History stays local under `~/.local/share/yokaze/history` by default, or
+  in the folder selected in Settings. Rename older `…/archives` to `history`
+  manually if upgrading.
 - The Stage tray and Paperless delivery index are local application data.
 - Paperless credentials are stored in
   `~/.config/yokaze/scanner.conf`.

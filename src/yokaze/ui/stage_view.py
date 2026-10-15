@@ -23,6 +23,7 @@ from .page_split import (
     split_crop_along_guides,
 )
 from .rotate_geom import step_rotate
+from .send_targets import SEND_TARGET_LABELS, ordered_deliver_targets
 from .staging_tray import (
     ReplaceDocumentGone,
     StagingTray,
@@ -80,13 +81,9 @@ class StageView(LabShell):
         self._count_label.add_css_class("heading")
         self.header.append(self._count_label)
 
-        self._send_btn = Gtk.Button(label="Send")
-        self._send_btn.add_css_class("suggested-action")
-        self._send_btn.set_tooltip_text(
-            "Send the selected pages when several are selected and some are left out. "
-            "Otherwise send every page."
-        )
-        self._send_btn.connect("clicked", self._on_send)
+        self._send_host = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self._send_btn: Gtk.Widget | None = None
+        self._send_busy = False
         self._clear_btn = Gtk.Button(label="Clear")
         self._clear_btn.add_css_class("destructive-action")
         self._clear_btn.connect("clicked", self._on_clear)
@@ -100,7 +97,7 @@ class StageView(LabShell):
         self._down_btn.connect("clicked", lambda *_: self._move(1))
 
         for w in (
-            self._send_btn,
+            self._send_host,
             self._clear_btn,
             self._delete_btn,
             self._up_btn,
@@ -108,6 +105,7 @@ class StageView(LabShell):
         ):
             w.set_can_focus(False)
             self.toolbar_start.append(w)
+        self.refresh_send_targets()
 
         split_menu = Gio.Menu()
         split_menu.append("Horizontal", "stage.split-horizontal")
@@ -204,6 +202,61 @@ class StageView(LabShell):
 
         self.refresh()
 
+    def refresh_send_targets(self) -> None:
+        """Rebuild Send control from Settings (exclude Stage as a destination)."""
+        while (child := self._send_host.get_first_child()) is not None:
+            self._send_host.remove(child)
+        self._send_btn = None
+        destinations = ordered_deliver_targets()
+        tooltip = (
+            "Send the selected pages when several are selected and some are left out. "
+            "Otherwise send every page."
+        )
+        if not destinations:
+            btn = Gtk.Button(label="Send")
+            btn.add_css_class("suggested-action")
+            btn.set_tooltip_text("No Send to destinations enabled in Settings")
+            btn.set_sensitive(False)
+            btn.set_can_focus(False)
+            self._send_host.append(btn)
+            self._send_btn = btn
+            return
+        if len(destinations) == 1:
+            target = destinations[0]
+            btn = Gtk.Button(label="Send")
+            btn.add_css_class("suggested-action")
+            btn.set_tooltip_text(tooltip)
+            btn.set_can_focus(False)
+            btn.connect("clicked", lambda *_a, t=target: self._on_send(t))
+            self._send_host.append(btn)
+            self._send_btn = btn
+            return
+
+        menu = Gio.Menu()
+        for target in destinations:
+            menu.append(SEND_TARGET_LABELS[target], f"stage.send-{target}")
+        menu_btn = Gtk.MenuButton(label="Send to", menu_model=menu)
+        menu_btn.add_css_class("suggested-action")
+        menu_btn.set_always_show_arrow(True)
+        menu_btn.set_tooltip_text(tooltip)
+        menu_btn.set_can_focus(False)
+        self._send_host.append(menu_btn)
+        self._send_btn = menu_btn
+
+        actions = Gio.SimpleActionGroup()
+        for target in destinations:
+            act = Gio.SimpleAction.new(f"send-{target}", None)
+            act.connect(
+                "activate",
+                lambda _a, _p, t=target: self._on_send(t),  # type: ignore[misc]
+            )
+            actions.add_action(act)
+        self.insert_action_group("stage", actions)
+
+    def _set_send_sensitive(self, sensitive: bool) -> None:
+        if self._send_btn is not None:
+            self._send_btn.set_sensitive(sensitive and not self._send_busy)
+
     @property
     def selected_id(self) -> str | None:
         return self._selected_id
@@ -213,6 +266,7 @@ class StageView(LabShell):
         self._flush_canvas_to_page()
 
     def on_show(self) -> None:
+        self.refresh_send_targets()
         self.refresh(select=self._selected_id)
 
     def refresh(self, *, select: str | None = None) -> None:
@@ -223,7 +277,7 @@ class StageView(LabShell):
         n = len(self._tray)
         self._count_label.set_text(f"{n} page{'s' if n != 1 else ''}")
         self.empty_label.set_visible(n == 0)
-        self._send_btn.set_sensitive(n > 0)
+        self._set_send_sensitive(n > 0)
         self._clear_btn.set_sensitive(n > 0)
 
         for index, page in enumerate(self._tray.pages):
@@ -868,16 +922,24 @@ class StageView(LabShell):
         wanted = set(send_page_ids(page_ids, self._selected_ids))
         return [page for page in self._tray.pages if page.id in wanted]
 
-    def _on_send(self, *_a) -> None:
+    def _on_send(self, target: str = "paperless") -> None:
         self._flush_canvas_to_page()
         if not self._tray.pages:
             return
-        targets = self._send_targets()
-        sent_ids = [page.id for page in targets]
+        destinations = ordered_deliver_targets()
+        if target not in destinations:
+            if not destinations:
+                return
+            target = destinations[0]
+        pages = self._send_targets()
+        sent_ids = [page.id for page in pages]
         whole_tray = len(sent_ids) == len(self._tray.pages)
-        self._send_btn.set_sensitive(False)
+        self._send_busy = True
+        self._set_send_sensitive(False)
         self._clear_btn.set_sensitive(False)
-        self._begin_send(sent_ids, whole_tray, skip_missing_replace=False)
+        self._begin_send(
+            sent_ids, whole_tray, skip_missing_replace=False, target=target
+        )
 
     def _begin_send(
         self,
@@ -885,8 +947,9 @@ class StageView(LabShell):
         whole_tray: bool,
         *,
         skip_missing_replace: bool,
+        target: str = "paperless",
     ) -> None:
-        targets = [
+        pages = [
             page
             for page in self._tray.pages
             if page.id in set(sent_ids)
@@ -896,36 +959,53 @@ class StageView(LabShell):
             try:
                 msg = send_staging_tray(
                     self._tray,
-                    pages=None if whole_tray else targets,
+                    pages=None if whole_tray else pages,
                     skip_missing_replace=skip_missing_replace,
+                    target=target,
                 )
-                GLib.idle_add(self._on_send_done, True, msg, sent_ids, whole_tray)
+                GLib.idle_add(
+                    self._on_send_done, True, msg, sent_ids, whole_tray, target
+                )
             except ReplaceDocumentGone as exc:
-                GLib.idle_add(self._on_replace_gone, str(exc), sent_ids, whole_tray)
+                GLib.idle_add(
+                    self._on_replace_gone, str(exc), sent_ids, whole_tray, target
+                )
             except Exception as exc:  # noqa: BLE001
-                GLib.idle_add(self._on_send_done, False, str(exc), sent_ids, whole_tray)
+                GLib.idle_add(
+                    self._on_send_done, False, str(exc), sent_ids, whole_tray, target
+                )
 
         threading.Thread(target=work, daemon=True).start()
 
     def _on_replace_gone(
-        self, detail: str, sent_ids: list[str], whole_tray: bool
+        self,
+        detail: str,
+        sent_ids: list[str],
+        whole_tray: bool,
+        target: str = "paperless",
     ) -> bool:
-        self._send_btn.set_sensitive(True)
+        self._send_busy = False
+        self._set_send_sensitive(True)
         self._clear_btn.set_sensitive(True)
         confirm_action(
             self,
             "Paperless document is gone",
             f"{detail}\n\nSend this Stage tray as a new document anyway?",
-            on_yes=lambda: self._retry_send_skipping_gone(sent_ids, whole_tray),
+            on_yes=lambda: self._retry_send_skipping_gone(
+                sent_ids, whole_tray, target
+            ),
         )
         return False
 
     def _retry_send_skipping_gone(
-        self, sent_ids: list[str], whole_tray: bool
+        self, sent_ids: list[str], whole_tray: bool, target: str = "paperless"
     ) -> None:
-        self._send_btn.set_sensitive(False)
+        self._send_busy = True
+        self._set_send_sensitive(False)
         self._clear_btn.set_sensitive(False)
-        self._begin_send(sent_ids, whole_tray, skip_missing_replace=True)
+        self._begin_send(
+            sent_ids, whole_tray, skip_missing_replace=True, target=target
+        )
 
     def _on_send_done(
         self,
@@ -933,8 +1013,11 @@ class StageView(LabShell):
         message: str,
         sent_ids: list[str] | None = None,
         whole_tray: bool = True,
+        target: str = "paperless",
     ) -> None:
-        self._send_btn.set_sensitive(True)
+        del target  # selection already delivered
+        self._send_busy = False
+        self._set_send_sensitive(True)
         self._clear_btn.set_sensitive(True)
         if ok:
             if whole_tray:

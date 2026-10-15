@@ -44,6 +44,19 @@ CSS = """
   opacity: 0.7;
 }
 
+/* Settings row help — same fg symbolic treatment as header/tab icons. */
+button.settings-row-info {
+  padding: 2px;
+  min-width: 22px;
+  min-height: 22px;
+  color: alpha(@window_fg_color, 0.8);
+}
+
+button.settings-row-info:hover,
+button.settings-row-info:active {
+  color: @window_fg_color;
+}
+
 /* Tune Finish: group tone / balance / sharpen / white-lock cleanly. */
 .tune-section {
   padding: 6px 0 14px 0;

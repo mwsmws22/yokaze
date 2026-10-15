@@ -25,6 +25,20 @@ PAPER_SIZE_A4 = "a4"
 PAPER_SIZES = (PAPER_SIZE_AUTO, PAPER_SIZE_A4)
 DEFAULT_PAPER_SIZE = PAPER_SIZE_AUTO
 
+SEND_TARGET_PAPERLESS = "paperless"
+SEND_TARGET_STAGE = "stage"
+SEND_TARGET_NAPS2 = "naps2"
+SEND_TARGET_FOLDER = "folder"
+SEND_TARGETS = (
+    SEND_TARGET_PAPERLESS,
+    SEND_TARGET_STAGE,
+    SEND_TARGET_NAPS2,
+    SEND_TARGET_FOLDER,
+)
+DEFAULT_SEND_TARGETS = frozenset(
+    {SEND_TARGET_PAPERLESS, SEND_TARGET_STAGE, SEND_TARGET_NAPS2}
+)
+
 _BUTTON_SERVICE = "yokaze-button.service"
 
 
@@ -62,6 +76,8 @@ class ScannerConfig:
     enhance_workers: int = DEFAULT_ENHANCE_WORKERS
     developer_mode: bool = False
     paper_size: str = DEFAULT_PAPER_SIZE
+    send_targets: frozenset[str] = DEFAULT_SEND_TARGETS
+    folder_dir: str = ""
 
     @property
     def is_configured(self) -> bool:
@@ -73,6 +89,19 @@ def _parse_enhance_workers(raw: str) -> int:
         return max(1, int(raw))
     except ValueError:
         return DEFAULT_ENHANCE_WORKERS
+
+
+def parse_send_targets(raw: str | None) -> frozenset[str]:
+    """Comma-separated SEND_TARGETS; empty/missing → default Paperless+Stage+NAPS2."""
+    if raw is None or not raw.strip():
+        return DEFAULT_SEND_TARGETS
+    found = {part.strip().lower() for part in raw.split(",") if part.strip()}
+    valid = frozenset(t for t in SEND_TARGETS if t in found)
+    return valid if valid else DEFAULT_SEND_TARGETS
+
+
+def format_send_targets(targets: frozenset[str] | set[str]) -> str:
+    return ",".join(t for t in SEND_TARGETS if t in targets)
 
 
 def _parse_config_text(text: str) -> ScannerConfig:
@@ -93,6 +122,8 @@ def _parse_config_text(text: str) -> ScannerConfig:
         ),
         developer_mode=_parse_bool(values.get("DEVELOPER_MODE", "0")),
         paper_size=parse_paper_size(values.get("PAPER_SIZE", DEFAULT_PAPER_SIZE)),
+        send_targets=parse_send_targets(values.get("SEND_TARGETS")),
+        folder_dir=values.get("FOLDER_DIR", "").strip(),
     )
 
 
@@ -127,15 +158,17 @@ def _config_file_text(cfg: ScannerConfig) -> str:
         f"SCAN_ENHANCE_WORKERS={cfg.enhance_workers}",
         f"DEVELOPER_MODE={'1' if cfg.developer_mode else '0'}",
         f"PAPER_SIZE={paper_size}",
+        f"SEND_TARGETS={format_send_targets(cfg.send_targets)}",
+        f"FOLDER_DIR={cfg.folder_dir}",
     ]
     return "\n".join(lines) + "\n"
 
 
-def save_config(cfg: ScannerConfig) -> None:
+def save_config(cfg: ScannerConfig, *, restart_button: bool = True) -> None:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_config_file_text(cfg))
-    apply_config(cfg, restart_button=True)
+    apply_config(cfg, restart_button=restart_button)
 
 
 def apply_config(cfg: ScannerConfig, *, restart_button: bool = False) -> None:
@@ -147,6 +180,10 @@ def apply_config(cfg: ScannerConfig, *, restart_button: bool = False) -> None:
     os.environ["PAPERLESS_TOKEN"] = cfg.paperless_token
     os.environ["SCAN_ENHANCE_WORKERS"] = str(cfg.enhance_workers)
     os.environ["PAPER_SIZE"] = paper_size
+    if cfg.folder_dir:
+        os.environ["FOLDER_DIR"] = cfg.folder_dir
+    else:
+        os.environ.pop("FOLDER_DIR", None)
 
     if not restart_button:
         return

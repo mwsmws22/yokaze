@@ -14,10 +14,11 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import archives
-from .archive_send import SendMode, send_archive_to_paperless, stage_archive
+from .archive_send import send_archive, stage_archive
 from .canvas import FitImageCanvas
 from .case_page_sidebar import CasePageSidebar, make_page_row
 from .lab_shell import LabShell, make_switch_row
+from .send_targets import SEND_TARGET_LABELS, SEND_TARGET_ORDER, ordered_send_targets
 from .staging_tray import StagingTray, require_paperless_send_gates
 
 
@@ -29,7 +30,7 @@ class HistoryView(LabShell):
         on_staged: Callable[[], None] | None = None,
         on_paperless_sent: Callable[[], None] | None = None,
     ) -> None:
-        super().__init__(empty_text="No archives yet.\nScan something first.")
+        super().__init__(empty_text="No history yet.\nScan something first.")
         self._toast = toast_overlay
         self._tray = staging_tray
         self._on_staged = on_staged
@@ -64,16 +65,7 @@ class HistoryView(LabShell):
         self._delete_btn.add_css_class("destructive-action")
         self._delete_btn.connect("clicked", self._on_delete)
 
-        paperless_menu = Gio.Menu()
-        paperless_menu.append("From history", "history.send-paperless-history")
-        paperless_menu.append("Reprocess", "history.send-paperless-reprocess")
-        stage_menu = Gio.Menu()
-        stage_menu.append("From history", "history.send-stage-history")
-        stage_menu.append("Reprocess", "history.send-stage-reprocess")
-        send_menu = Gio.Menu()
-        send_menu.append_submenu("Paperless", paperless_menu)
-        send_menu.append_submenu("Stage", stage_menu)
-        self._send_btn = Gtk.MenuButton(label="Send to", menu_model=send_menu)
+        self._send_btn = Gtk.MenuButton(label="Send to")
         self._send_btn.set_always_show_arrow(True)
 
         for w in (self._send_btn, self._reveal_btn, self._delete_btn):
@@ -90,26 +82,28 @@ class HistoryView(LabShell):
         delete_action = Gio.SimpleAction.new("delete-archive", None)
         delete_action.connect("activate", self._on_delete_archive_action)
         actions.add_action(delete_action)
-        for name, target, mode in (
-            ("send-paperless", "paperless", "from_history"),
-            ("send-paperless-history", "paperless", "from_history"),
-            ("send-paperless-reprocess", "paperless", "reprocess"),
-            ("send-stage", "stage", "from_history"),
-            ("send-stage-history", "stage", "from_history"),
-            ("send-stage-reprocess", "stage", "reprocess"),
-        ):
-            act = Gio.SimpleAction.new(name, None)
+        for target in SEND_TARGET_ORDER:
+            act = Gio.SimpleAction.new(f"send-{target}", None)
             act.connect(
                 "activate",
-                lambda _a, _p, t=target, m=mode: self._on_send_action(t, m),  # type: ignore[misc]
+                lambda _a, _p, t=target: self._on_send_action(t),  # type: ignore[misc]
             )
             actions.add_action(act)
         self.insert_action_group("history", actions)
+        self.refresh_send_targets()
 
         self._set_actions_sensitive(False)
         self.refresh()
 
+    def refresh_send_targets(self) -> None:
+        menu = Gio.Menu()
+        for target in ordered_send_targets():
+            menu.append(SEND_TARGET_LABELS[target], f"history.send-{target}")
+        self._send_btn.set_menu_model(menu)
+        self._send_btn.set_sensitive(menu.get_n_items() > 0)
+
     def on_show(self) -> None:
+        self.refresh_send_targets()
         self.refresh()
 
     def handle_nav_key(self, keyval: int) -> bool:
@@ -244,8 +238,11 @@ class HistoryView(LabShell):
             self._case_menu_popover = None
 
         menu = Gio.Menu()
-        menu.append("Send to Paperless", "history.send-paperless")
-        menu.append("Send to Stage", "history.send-stage")
+        for target in ordered_send_targets():
+            menu.append(
+                f"Send to {SEND_TARGET_LABELS[target]}",
+                f"history.send-{target}",
+            )
         menu.append("Delete archive", "history.delete-archive")
 
         popover = Gtk.PopoverMenu.new_from_model(menu)
@@ -265,20 +262,20 @@ class HistoryView(LabShell):
             return
         self._delete_archive(self._context_archive)
 
-    def _on_send_action(self, target: str, mode: SendMode) -> None:
+    def _on_send_action(self, target: str) -> None:
         archive = self._context_archive or self._archive
         if not archive:
             return
         if target == "stage":
-            self._send_to_stage(archive, mode=mode)
-        elif target == "paperless":
-            self._send_to_paperless(archive, mode=mode)
+            self._send_to_stage(archive)
+        elif target in ("paperless", "naps2", "folder"):
+            self._send_deliver(archive, target)
 
     def _set_send_busy(self, busy: bool) -> None:
         self._send_busy = busy
         self._set_actions_sensitive(bool(self._archive))
 
-    def _send_to_stage(self, archive: str, *, mode: SendMode = "from_history") -> None:
+    def _send_to_stage(self, archive: str) -> None:
         if self._tray is None:
             self._notify("Stage tray not available", error=True)
             return
@@ -287,13 +284,12 @@ class HistoryView(LabShell):
         if self._case_menu_popover is not None:
             self._case_menu_popover.popdown()
         self._set_send_busy(True)
-        label = "Reprocessing" if mode == "reprocess" else "Staging"
-        self._notify(f"{label} {archive}…")
+        self._notify(f"Staging {archive}…")
 
         def work() -> None:
             try:
                 assert self._tray is not None
-                added = stage_archive(archive, self._tray, mode=mode)
+                added = stage_archive(archive, self._tray, mode="from_history")
                 GLib.idle_add(self._on_stage_done, archive, added)
             except Exception as exc:  # noqa: BLE001
                 GLib.idle_add(self._on_send_failed, "Stage failed", str(exc))
@@ -308,36 +304,37 @@ class HistoryView(LabShell):
             self._notify(f"Staged {added} page(s) from {archive}")
         return False
 
-    def _send_to_paperless(
-        self, archive: str, *, mode: SendMode = "from_history"
-    ) -> None:
+    def _send_deliver(self, archive: str, target: str) -> None:
         if self._send_busy:
             return
         if self._case_menu_popover is not None:
             self._case_menu_popover.popdown()
-        # Gate before toast / rebord so dirty tree fails immediately.
-        try:
-            require_paperless_send_gates(action="Send to Paperless")
-        except Exception as exc:  # noqa: BLE001
-            self._notify("Paperless send failed", detail=str(exc), error=True)
-            return
+        label = SEND_TARGET_LABELS.get(target, target)  # type: ignore[arg-type]
+        # Gate before toast / tip replay so dirty tree fails immediately.
+        if target == "paperless":
+            try:
+                require_paperless_send_gates(action="Send to Paperless")
+            except Exception as exc:  # noqa: BLE001
+                self._notify("Paperless send failed", detail=str(exc), error=True)
+                return
         self._set_send_busy(True)
-        label = "Reprocessing" if mode == "reprocess" else "Sending"
-        self._notify(f"{label} {archive} to Paperless…")
+        self._notify(f"Sending {archive} to {label}…")
 
         def work() -> None:
             try:
-                msg = send_archive_to_paperless(archive, mode=mode)
-                GLib.idle_add(self._on_paperless_done, msg)
+                msg = send_archive(archive, target=target, mode="from_history")  # type: ignore[arg-type]
+                GLib.idle_add(self._on_deliver_done, msg, target)
             except Exception as exc:  # noqa: BLE001
-                GLib.idle_add(self._on_send_failed, "Paperless send failed", str(exc))
+                GLib.idle_add(
+                    self._on_send_failed, f"{label} send failed", str(exc)
+                )
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _on_paperless_done(self, msg: str) -> bool:
+    def _on_deliver_done(self, msg: str, target: str) -> bool:
         self._set_send_busy(False)
         self._notify(msg)
-        if self._on_paperless_sent is not None:
+        if target == "paperless" and self._on_paperless_sent is not None:
             self._on_paperless_sent()
         return False
 

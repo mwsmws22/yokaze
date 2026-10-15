@@ -205,6 +205,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._settings = SettingsView(
             toast,
             on_scanners_changed=self._scanner_status.refresh,
+            on_settings_saved=self._on_settings_saved,
         )
         self._view_stack.add_titled_with_icon(
             self._settings, "settings", "Settings", "preferences-system-symbolic"
@@ -328,6 +329,12 @@ class MainWindow(Adw.ApplicationWindow):
     def trigger_scan(self) -> None:
         self.show_tab("scan")
         self._scan_view.trigger_scan()
+
+    def _on_settings_saved(self) -> None:
+        self._scan_view.refresh_send_targets()
+        self._history.refresh_send_targets()
+        self._stage.refresh_send_targets()
+        self._stage.refresh(select=self._stage.selected_id)
 
     def _on_visible_child_changed(self, stack, _pspec) -> None:
         self._scanner_status.refresh()

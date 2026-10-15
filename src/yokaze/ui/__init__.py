@@ -17,7 +17,9 @@ DATA = _paths.resolve_data_dir()
 CORPUS = DATA / "corpus"
 # Crop-attempt bookmarks retired; crops live in metadata.history + attempts.json
 ATTEMPTS_JSON = DATA / "attempts.json"
-ARCHIVES = _paths.resolve_archives_dir()
+HISTORY = _paths.resolve_history_dir()
+# Alias: per-scan dirs still called archives; root folder is History.
+ARCHIVES = HISTORY
 CACHE = _paths.cache_dir()
 LIB_CORE = ROOT / "lib" / "core"
 LIB_CORPUS = LIB_CORE / "corpus"
@@ -25,12 +27,13 @@ LIB_CORPUS = LIB_CORE / "corpus"
 
 def refresh_paths() -> None:
     """Re-bind module path globals after Settings override or identity change."""
-    global APP_ID, DATA, CORPUS, ATTEMPTS_JSON, ARCHIVES, CACHE
+    global APP_ID, DATA, CORPUS, ATTEMPTS_JSON, HISTORY, ARCHIVES, CACHE
     APP_ID = _paths.app_id()
     DATA = _paths.resolve_data_dir()
     CORPUS = DATA / "corpus"
     ATTEMPTS_JSON = DATA / "attempts.json"
-    ARCHIVES = _paths.resolve_archives_dir()
+    HISTORY = _paths.resolve_history_dir()
+    ARCHIVES = HISTORY
     CACHE = _paths.cache_dir()
     # Keep backend's imported aliases in sync (tests monkeypatch those names).
     from yokaze.ui import backend as _backend

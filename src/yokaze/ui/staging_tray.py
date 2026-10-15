@@ -554,17 +554,21 @@ def send_staging_tray(
     name: str | None = None,
     pages: list[StagedPage] | None = None,
     skip_missing_replace: bool = False,
+    target: str = "paperless",
 ) -> str:
-    """PDF+Paperless for the tray, or for ``pages`` when that is a subset.
+    """PDF + deliver for the tray, or for ``pages`` when that is a subset.
 
     Tone and sharpen run only on pages that are not already finished. A corpus
     page staged from Evaluate is finished; a History page is not.
 
-    A whole-tray send deletes replace-pendings. A subset leaves them, and the
-    pages that were not sent. Does not clear the tray. Missing Paperless docs
+    Paperless whole-tray sends delete replace-pendings. A subset leaves them, and
+    the pages that were not sent. Does not clear the tray. Missing Paperless docs
     abort unless ``skip_missing_replace`` is true (Stage confirmed in a popup).
     """
     from yokaze.lib.deliver import paperless as pl
+
+    if target not in ("paperless", "naps2", "folder"):
+        raise ValueError(f"invalid stage deliver target {target!r}")
 
     staged = list(tray.pages if pages is None else pages)
     if not staged:
@@ -573,17 +577,21 @@ def send_staging_tray(
         page.id for page in tray.pages
     }
 
-    require_paperless_send_gates(action="scan")
-
-    if whole_tray:
-        found, missing = pl.resolve_replace_document_ids(tray.replace_pending)
-        if missing and not skip_missing_replace:
-            listing = "\n".join(f"• {u}" for u in missing)
-            raise ReplaceDocumentGone(
-                "Paperless no longer has the document this Stage send would replace:\n"
-                f"{listing}"
-            )
-        pl.delete_replace_documents(found)
+    if target == "paperless":
+        require_paperless_send_gates(action="scan")
+        if whole_tray:
+            found, missing = pl.resolve_replace_document_ids(tray.replace_pending)
+            if missing and not skip_missing_replace:
+                listing = "\n".join(f"• {u}" for u in missing)
+                raise ReplaceDocumentGone(
+                    "Paperless no longer has the document this Stage send would replace:\n"
+                    f"{listing}"
+                )
+            pl.delete_replace_documents(found)
+    elif target == "folder":
+        folder = os.environ.get("FOLDER_DIR", "").strip()
+        if not folder:
+            raise RuntimeError("Folder destination is not configured in Settings")
 
     pipeline = default_pipeline()
     work = Path(tempfile.mkdtemp(prefix="yokaze-stage-send-"))
@@ -600,7 +608,7 @@ def send_staging_tray(
                 pipeline.finish.apply_tone(untuned)
             pdf = pipeline.finish.write_pdf(rendered, pdf_out)
             task_uuid = pipeline.deliver.deliver(
-                pdf, target="paperless", name=doc_name
+                pdf, target=target, name=doc_name  # type: ignore[arg-type]
             )
         finally:
             if previous is None:
@@ -608,17 +616,21 @@ def send_staging_tray(
             else:
                 os.environ["COLOR_MODE"] = previous
 
-        if not task_uuid:
-            raise RuntimeError("Paperless upload returned no task UUID")
-        append_delivery(
-            Delivery(
-                task_uuid=task_uuid,
-                brod_pin=_current_brod_pin(),
-                pages=delivery_pages_for(staged),
-                name=doc_name,
+        if target == "paperless":
+            if not task_uuid:
+                raise RuntimeError("Paperless upload returned no task UUID")
+            append_delivery(
+                Delivery(
+                    task_uuid=task_uuid,
+                    brod_pin=_current_brod_pin(),
+                    pages=delivery_pages_for(staged),
+                    name=doc_name,
+                )
             )
-        )
-        return f"Done: {doc_name}.pdf uploaded to Paperless"
+            return f"Done: {doc_name}.pdf uploaded to Paperless"
+        if target == "naps2":
+            return f"Done: {doc_name}.pdf sent to NAPS2"
+        return f"Done: {doc_name}.pdf saved to folder"
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

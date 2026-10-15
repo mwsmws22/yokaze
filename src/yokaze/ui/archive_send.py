@@ -21,7 +21,7 @@ from yokaze.ui.staging_tray import StagingTray, require_paperless_send_gates, se
 _PAGE_STEM_RE = re.compile(r"page-(\d+)", re.I)
 
 SendMode = Literal["from_history", "reprocess"]
-SendTarget = Literal["paperless", "stage"]
+SendTarget = Literal["paperless", "stage", "naps2", "folder"]
 
 
 @dataclass
@@ -365,10 +365,26 @@ def send_archive_to_paperless(
     mode: SendMode = "from_history",
 ) -> str:
     """Prepare → ephemeral tray → Paperless (always new document)."""
-    require_paperless_send_gates(action="Send to Paperless")
+    return send_archive(
+        archive, target="paperless", color_mode=color_mode, mode=mode
+    )
+
+
+def send_archive(
+    archive: str,
+    *,
+    target: SendTarget,
+    color_mode: str = "color",
+    mode: SendMode = "from_history",
+) -> str:
+    """Prepare → ephemeral tray → Paperless / NAPS2 / folder (not Stage)."""
+    if target == "stage":
+        raise ValueError("use stage_archive for Stage")
+    if target == "paperless":
+        require_paperless_send_gates(action="Send to Paperless")
     tray = StagingTray()
     try:
         stage_archive(archive, tray, color_mode=color_mode, mode=mode)
-        return send_staging_tray(tray, name=archive)
+        return send_staging_tray(tray, name=archive, target=target)
     finally:
         tray.clear()

@@ -211,16 +211,23 @@ def test_send_archive_to_paperless_delegates_to_send_staging_tray(
 
     called: dict = {}
 
-    def fake_send(tray: StagingTray, *, name: str | None = None) -> str:
+    def fake_send(
+        tray: StagingTray,
+        *,
+        name: str | None = None,
+        target: str = "paperless",
+        **_kw,
+    ) -> str:
         called["n"] = len(tray.pages)
         called["name"] = name
+        called["target"] = target
         assert tray.replace_pending == []
         return "Done: uploaded"
 
     monkeypatch.setattr(archive_send, "send_staging_tray", fake_send)
     msg = archive_send.send_archive_to_paperless("scan-c", mode="reprocess")
     assert msg == "Done: uploaded"
-    assert called == {"n": 1, "name": "scan-c"}
+    assert called == {"n": 1, "name": "scan-c", "target": "paperless"}
 
 
 def test_prepare_archive_from_history_uses_tip(tmp_path, monkeypatch):

@@ -1,4 +1,4 @@
-"""Identity-scoped XDG paths; archives override separate from lab data."""
+"""Identity-scoped XDG paths; history override separate from lab data."""
 
 from __future__ import annotations
 
@@ -101,51 +101,60 @@ def _write_app_conf(values: dict[str, str]) -> None:
     conf.write_text("\n".join(lines) + "\n")
 
 
-def load_archives_dir_override() -> Path | None:
-    """Settings override for the archives root (directory of archive slug folders)."""
+def load_history_dir_override() -> Path | None:
+    """Settings override for the History root (directory of archive slug folders)."""
     conf = _read_app_conf()
-    raw = conf.get("archives_dir", "").strip()
-    if raw:
-        return Path(raw).expanduser()
-    # Legacy: data_dir was the parent of archives/ (whole tree root).
+    for key in ("history_dir", "archives_dir"):
+        raw = conf.get(key, "").strip()
+        if raw:
+            return Path(raw).expanduser()
+    # Legacy: data_dir was the parent of the history/archives root.
     legacy = conf.get("data_dir", "").strip()
     if legacy:
-        return Path(legacy).expanduser() / "archives"
+        return Path(legacy).expanduser() / "history"
     return None
 
 
-def save_archives_dir_override(archives_dir: Path | None) -> None:
-    """Persist archives override, or clear it (XDG default). Drops legacy data_dir."""
+def save_history_dir_override(history_dir: Path | None) -> None:
+    """Persist History override, or clear it (XDG default). Drops legacy keys."""
     conf = _read_app_conf()
     conf.pop("data_dir", None)
-    if archives_dir is None:
-        conf.pop("archives_dir", None)
+    conf.pop("archives_dir", None)
+    if history_dir is None:
+        conf.pop("history_dir", None)
     else:
-        conf["archives_dir"] = str(archives_dir.expanduser())
+        conf["history_dir"] = str(history_dir.expanduser())
     _write_app_conf(conf)
 
 
-# Back-compat aliases used by older Settings / tests.
+# Back-compat aliases (folder was formerly called archives).
+load_archives_dir_override = load_history_dir_override
+save_archives_dir_override = save_history_dir_override
+
+
 def load_data_dir_override() -> Path | None:
-    """Deprecated: returns parent of archives override when set."""
-    archives = load_archives_dir_override()
-    return None if archives is None else archives.parent
+    """Deprecated: returns parent of history override when set."""
+    history = load_history_dir_override()
+    return None if history is None else history.parent
 
 
 def save_data_dir_override(data_dir: Path | None) -> None:
-    """Deprecated: Settings used to store the parent of archives/."""
+    """Deprecated: Settings used to store the parent of history/."""
     if data_dir is None:
-        save_archives_dir_override(None)
+        save_history_dir_override(None)
         return
-    save_archives_dir_override(Path(data_dir).expanduser() / "archives")
+    save_history_dir_override(Path(data_dir).expanduser() / "history")
 
 
-def resolve_archives_dir() -> Path:
-    """Scan History archives root — XDG by default; Settings may override."""
-    override = load_archives_dir_override()
+def resolve_history_dir() -> Path:
+    """Scan History root — XDG by default; Settings may override."""
+    override = load_history_dir_override()
     if override is not None:
         return override
-    return data_xdg_dir() / "archives"
+    return data_xdg_dir() / "history"
+
+
+resolve_archives_dir = resolve_history_dir
 
 
 def resolve_stage_tray_dir() -> Path:
@@ -167,7 +176,7 @@ def resolve_data_dir() -> Path:
     """Lab / workbench data root (corpus, attempts, pins, …).
 
     Dev always uses ``<repo>/data``. User (release) uses the XDG data dir.
-    Archives, Stage tray, and delivery-brod cache are resolved separately under XDG.
+    History, Stage tray, and delivery-brod cache are resolved separately under XDG.
     """
     if identity() == IDENTITY_DEV:
         return find_repo_root() / "data"
